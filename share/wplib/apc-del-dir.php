@@ -8,16 +8,16 @@
 
 
 // INSTALL
-// download from https://gist.github.com/szepeviktor/10309627
+// download from here
 // chown www-data:www-data apc-delete-dir.php
 // chmod 640 apc-delete-dir.php
 
 
 class AESpipe
 {
-    private $url = 'https://szepe.net/apc-del-dir.php';
+    private $url = '-URL-/apc-del-dir.php';
     private $ua = 'apc cleaner/1.0';
-    private $key = 'iephupoodeis0ahf4mah9Lee1ObeiF';
+    private $key = '-to-be-filled-in-`pwgen 30 1`';
     private $keyhash = '';
     private $ivsize = 0;
 
