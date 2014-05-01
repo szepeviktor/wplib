@@ -1,0 +1,151 @@
+isIP() {
+    local TOBEIP="$1"
+    ## "^__\(__[0-9]\{1,3\}\.__\)__\{3\}__[0-9]\{1,3\}__\$"
+
+    if grep -q "^\([0-9]\{1,3\}\.\)\{3\}[0-9]\{1,3\}\$" <<<"$TOBEIP"
+    then
+        # OK
+        return 0
+    else
+        # not an IP
+        return 1
+    fi
+}
+
+
+die() {
+    # close all files
+    # close all bg-s
+    # reset all hardwares
+    # pop pushd-s
+    local RET="$1"
+    shift
+
+    echo -e "$@" >&2
+    exit "$RET"
+}
+
+
+diedate() {
+    local UNIVERSAL_DATEFMT="+%Y-%m-%d %H:%M:%S"
+
+    echo -n "$(date "$UNIVERSAL_DATEFMT") "
+    die "$@"
+    # echo >> logs
+    # echo -ne "\a"
+    # sleep 2
+}
+
+
+strong_password() {
+    # $1 <password>
+    # $2 <repeat_password>
+    # ret 0 - OK (strong)
+    # ret 1 - not equal
+    # ret 2 - shorter than minimal length
+    # ret 3 - doesn't contain [a-z0-9A-Z]
+
+    local MINLEN=8
+
+    if ! [ "$1" = "$2" ]
+    then
+        return 1
+    fi
+
+    if [ ${#1} -lt $MINLEN ]
+    then
+        return 2
+    fi
+
+    if [ "${1//[a-z]}" = "$1" ] || [ "${1//[0-9]}" = "$1" ] || [ "${1//[A-Z]}" = "$1" ]
+    then
+        return 3
+    fi
+}
+
+
+cmd_check() {
+    # cmd_check <commands list>
+
+    local CMD_CHK_FAIL=99
+
+    which --version >/dev/null 2>&1 || exit $CMD_CHK_FAIL
+    for CMDS in $@
+    do
+        which $CMDS >/dev/null 2>&1 || exit $CMD_CHK_FAIL
+    done
+}
+
+
+amiroot() {
+    # usage: $* - script's $*
+
+    local ROOT_UID=0
+
+    if ! [ "`id --user`" = ${ROOT_UID} ]
+    then
+        echo -n "Enter root password "
+        su - "${PWD}/$0" $@ || exit 1
+        exit
+    fi
+}
+
+
+unslash() {
+    local PRE_SLASH="${1//\//\\\/}"
+
+    # echo ${PRE_SLASH// /_}
+    echo $PRE_SLASH
+}
+
+
+unbackslash() {
+    echo ${1//\\\\/\\\\}
+}
+
+
+inset() {
+    # ret 0 - IN SET
+    # ret 1 - no element
+    # ret 2 - no set
+    # ret 3 - not in set
+
+    local SET_E
+    local IN_SET_ELEMENT="$1"
+    shift
+    local IN_SET="$*"
+
+    [ -z "$IN_SET_ELEMENT" ] && return 1
+    [ -z "$IN_SET" ] && return 2
+
+    for SET_E in $IN_SET
+    do
+        [ "$SET_E" = "$IN_SET_ELEMENT" ] && return 0
+    done
+    return 3
+}
+
+
+date_check() {
+    # usage: $1 - date (YYYYMMDD)
+    # usage: $1 $2 - datetime (YYYYMMDDhhmm)
+    # usage: $1 $2 - date time (YYYYMMDD hhmm)
+    # delimiters are fitered out
+
+    local DATECHK_DATE DATECHK_Y DATECHK_M DATECHK_D
+    local TIMEDATECHK_ DATECHK_ DATECHK_ DATECHK_ 
+
+    datum="$1"
+    year="${datum:0:4}"
+    month="${datum:4:2}"
+    day="${datum:6:2}"
+
+    if ! [ "${#datum}" = 8 ] || ! [ "$datum" = "${datum//[0-9]/}" ] \
+        || [ $year -lt 2004 ] || [ $year -gt 2009 ] \
+        || [ $month -lt 1 ] || [ $month -gt 12 ] \
+        || [ $day -lt 1 ] || [ $day -gt 31 ]
+    then
+        die 1 "$fname ervenytelen $datum"
+    fi
+}
+
