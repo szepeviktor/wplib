@@ -5,6 +5,7 @@ wp-cli shell scripts to manage several websites
 
 ### COMMAND SUMMARY
 
+```
 Usage: wp-lib.sh [--root=<WORDPRESS-ROOT>] <COMMAND> [OPTIONS]
 It is a wrapper around wp-cli with sudo.
 
@@ -35,3 +36,4 @@ EXAMPLES
     wp-lib.sh --root=/var/www/wp/server do-wp core version --extra
     wp-lib.sh --root=/var/www/wp/server itsec-screen mary
     wp-lib.sh help-aliases
+```
