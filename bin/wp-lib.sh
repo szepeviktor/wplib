@@ -120,7 +120,7 @@ case "$COMMAND" in
     ;;
 esac
 
-if [ "$(dirs)" != "$(pwd)" ]; then
+if [ "$(eval echo `dirs`)" != "$(pwd)" ]; then
     wp_log__ "leaving: "
     popd
 fi
