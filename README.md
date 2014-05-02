@@ -1,7 +1,7 @@
 wplib
 =====
 
-wp-cli shell scripts to manage several websites
+[wp-cli](https://github.com/wp-cli/wp-cli) shell scripts to manage several websites
 
 ### COMMAND SUMMARY
 
