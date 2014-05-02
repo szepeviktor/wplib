@@ -12,7 +12,7 @@ It is a wrapper around wp-cli with sudo.
   --root=<WORDPRESS-ROOT>         set WordPress root directory
   get-owner                       display the owner of the root directory
   chown                           revert the owner of all files recursively
-  detect-wp                       detecet WordPress installation
+  detect-wp                       detect WordPress installation
   do-wp <COMMAND>                 execute any wp-cli command
   update-core                     update WordPress core
   clear-cache                     clear this WordPress installation
@@ -26,6 +26,8 @@ It is a wrapper around wp-cli with sudo.
   plugin-minor-updates --second   update plugins with no change in the
                                   first and second version number
   plugin-update-except <PLUGINS>  update all plugins except those listed
+  plugin-update-backup            update all plugins with backup
+  plugin-backup <PLUGIN>          backs up a given plugin
   check-wpconfig                  check all required defines in wp-config.php
   help                            display this help and exit
   version                         display wp-lib version
