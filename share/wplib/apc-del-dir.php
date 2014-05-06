@@ -8,7 +8,6 @@
 
 
 // INSTALL
-// download from here
 // chown www-data:www-data apc-delete-dir.php
 // chmod 640 apc-delete-dir.php
 
@@ -16,8 +15,8 @@
 class AESpipe
 {
     private $url = '-URL-/apc-del-dir.php';
-    private $ua = 'apc cleaner/1.0';
     private $key = '-to-be-filled-in-`pwgen 30 1`';
+    private $ua = 'apc cleaner/1.0';
     private $keyhash = '';
     private $ivsize = 0;
 
@@ -102,8 +101,9 @@ function notok() {
 
 /* ########################################### */
 
-// no php-mcrypt
+// no mcrypt or apc
 if (! extension_loaded('mcrypt')) die;
+if (! extension_loaded('apc')) die;
 
 if (php_sapi_name() === 'cli') {
 

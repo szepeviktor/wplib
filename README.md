@@ -8,12 +8,15 @@ wplib
 ```
 Usage: wp-lib.sh [--root=<WORDPRESS-ROOT>] <COMMAND> [OPTIONS]
 It is a wrapper around wp-cli with sudo.
+Turn on profiling by setting WPLIB_PROFILE environment variable.
 
   --root=<WORDPRESS-ROOT>         set WordPress root directory
   get-owner                       display the owner of the root directory
   chown                           revert the owner of all files recursively
   detect-wp                       detect WordPress installation
+  detect-php-errors               detect PHP errors while running wp-cli
   do-wp <COMMAND>                 execute any wp-cli command
+  full-setup                      full setup with DB user creation
   update-core                     update WordPress core
   clear-cache                     clear this WordPress installation
                                   from APC opcode cache
@@ -29,6 +32,9 @@ It is a wrapper around wp-cli with sudo.
   plugin-update-backup            update all plugins with backup
   plugin-backup <PLUGIN>          backs up a given plugin
   check-wpconfig                  check all required defines in wp-config.php
+  mount-cache <SIZE>              mount WP cache directory to a ramdisk
+                                  only root can mount tmpfs, size is in MB
+  umount-cache                    un-mount WP cache directory
   help                            display this help and exit
   version                         display wp-lib version
   help-aliases                    list command aliases
@@ -38,4 +44,5 @@ EXAMPLES
     wp-lib.sh --root=/var/www/wp/server do-wp core version --extra
     wp-lib.sh --root=/var/www/wp/server itsec-screen mary
     wp-lib.sh help-aliases
+    WPLIB_PROFILE=1 wp-lib.sh --root=/var/www/wp/server sudo plugin list
 ```

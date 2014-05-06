@@ -1,19 +1,26 @@
 #!/bin/bash
 
+WPLIB_VERSION="1.1"
+
+
 . /usr/local/share/wplib/wp-libwp.sh
-WPLIB_VERSION="1.0"
 
 usage(){
     WPLIB="$(basename $0)"
+
     cat <<HLP
 Usage: ${WPLIB} [--root=<WORDPRESS-ROOT>] <COMMAND> [OPTIONS]
 It is a wrapper around wp-cli with sudo.
+Turn on profiling by setting WPLIB_PROFILE environment variable.
 
   --root=<WORDPRESS-ROOT>         set WordPress root directory
   get-owner                       display the owner of the root directory
   chown                           revert the owner of all files recursively
   detect-wp                       detect WordPress installation
+  detect-php-errors               detect PHP errors while running wp-cli
   do-wp <COMMAND>                 execute any wp-cli command
+  full-setup                      full setup with DB user creation
+                                  setting are read from ~/.wplib
   update-core                     update WordPress core
   clear-cache                     clear this WordPress installation
                                   from APC opcode cache
@@ -29,6 +36,10 @@ It is a wrapper around wp-cli with sudo.
   plugin-update-backup            update all plugins with backup
   plugin-backup <PLUGIN>          backs up a given plugin
   check-wpconfig                  check all required defines in wp-config.php
+  mount-cache <SIZE>              mount WP cache directory to a ramdisk
+                                  only root can mount tmpfs, size is in MB
+  umount-cache                    un-mount WP cache directory
+  autoload-estimate               estimate overall size of autoload options
   help                            display this help and exit
   version                         display wp-lib version
   help-aliases                    list command aliases
@@ -38,6 +49,7 @@ EXAMPLES
     ${WPLIB} --root=/var/www/wp/server do-wp core version --extra
     ${WPLIB} --root=/var/www/wp/server itsec-screen mary
     ${WPLIB} help-aliases
+    WPLIB_PROFILE=1 ${WPLIB} --root=/var/www/wp/server sudo plugin list
 HLP
 }
 
@@ -45,8 +57,9 @@ HLP
 _ROOT="${1#--root=}"
 if [ ! "${_ROOT}" = "$1" ]; then
     shift
-    wp_log__ "entering: "
-    pushd "${_ROOT}"
+    #wp_log__ "entering: "
+# FIXME this won't work if ROOT has perms like 750
+    pushd "${_ROOT}" > /dev/null
 fi
 
 
@@ -76,12 +89,25 @@ case "$COMMAND" in
         if [ $? = 0 ]; then
             wp_log "wp is installed"
         else
-            wp_log "NO wp here!"
+            wp_error "NO wp here!"
+        fi
+    ;;
+    detect-php-errors | detect-errors)#
+        detect_php_errors
+        RET=$?
+        if [ "$RET" = 0 ]; then
+            wp_log "no PHP errors"
+        elif [ "$RET" = 101 ]; then
+            wp_error "wp option get siteurl caused errors: $RET"
+        elif [ "$RET" = 102 ]; then
+            wp_error "wp eval 'echo 1;' caused errors: $RET"
+        else
+            wp_error "error: $RET"
         fi
     ;;
     do-wp | dowp | sudo)#
         get_owner
-        do_wp $@
+        do_wp "$@"
         wp_log "exit code: $?"
     ;;
     update-core | update | core-update)#
@@ -118,10 +144,61 @@ case "$COMMAND" in
     check-wpconfig | check-config | configtest)#
         check_wpconfig
     ;;
+    mount-cache | mount)#
+        mount_cache "$1"
+        RET=$?
+        if [ "$RET" = 0 ]; then
+            wp_log "mount OK"
+        else
+            wp_error "mount failure: $RET"
+        fi
+    ;;
+    umount-cache | umount | unmount)#
+        umount_cache
+        RET=$?
+        if [ "$RET" = 0 ]; then
+            wp_log "umount OK"
+        else
+            wp_error "umount failure: $RET"
+        fi
+    ;;
+    check-yaml | yaml)#
+        check_yaml
+        wp_log "exit code: $?"
+    ;;
+    full-setup | setup )#
+        full_setup
+        RET=$?
+        if [ "$RET" = 0 ]; then
+            wp_log "setup OK."
+        else
+            wp_error "setup error: $RET"
+        fi
+    ;;
+    autoload-estimate | autoload)#
+        wp_log__ "autoload size="
+        autoload_estimate
+        wp_log___
+    ;;
+    *)
+        wp_error "'${COMMAND}' is not a registered wp command"
+        usage
+    ;;
 esac
 
+## TODO
+## - general sudo__ function for shell commands
+## - db for sites ~/wp.sql3 wp-s: wproot, owner, locale, siteurl, user, cache mount path
+## - check_root_files() {crossdomain.xml}
+## - Glacier backup/delete cron
+## - use WP_CLI_CONFIG_PATH for sudo instead cd ??
+#
+## input: /var/www/*/server/wp-cli.yml /home/*/public*/server/wp-cli.yml -OR- wp-load.php
+#
+#for future use: local YAML_USER="$(do_wp__ eval "echo WP_CLI::get_config('user');")" #"
+
 if [ "$(eval echo `dirs`)" != "$(pwd)" ]; then
-    wp_log__ "leaving: "
-    popd
+    #wp_log__ "leaving: "
+    popd > /dev/null
 fi
 

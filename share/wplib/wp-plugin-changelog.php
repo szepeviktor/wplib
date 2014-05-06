@@ -1,5 +1,7 @@
 <?php
 
+# old crap
+
 function wplib_read_plugin_api($plugin) {
 
     if (empty($plugin)) return false;

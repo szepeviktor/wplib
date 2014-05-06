@@ -1,3 +1,6 @@
+#!/bin/bash
+
+
 isIP() {
     local TOBEIP="$1"
     ## "^__\(__[0-9]\{1,3\}\.__\)__\{3\}__[0-9]\{1,3\}__\$"
@@ -105,22 +108,28 @@ unbackslash() {
 
 
 inset() {
-    # ret 0 - IN SET
-    # ret 1 - no element
-    # ret 2 - no set
-    # ret 3 - not in set
+    # usage:
+    #       inset <ELEMENT> <SET>
+    # example:
+    #       inset "apple" "${FRUITS[*]}"
+    #       inset "apple" "pear" "peach" "apple"
+    # returns:
+    # 0 - IN SET
+    # 1 - no element
+    # 2 - no set
+    # 3 - not in set
 
-    local SET_E
-    local IN_SET_ELEMENT="$1"
+    local ELEMENT="$1"
     shift
-    local IN_SET="$*"
+    local SET="$*"
+    local SET_E
 
-    [ -z "$IN_SET_ELEMENT" ] && return 1
-    [ -z "$IN_SET" ] && return 2
+    [ -z "$ELEMENT" ] && return 1
+    [ -z "$SET" ] && return 2
 
-    for SET_E in $IN_SET
+    for SET_E in $SET
     do
-        [ "$SET_E" = "$IN_SET_ELEMENT" ] && return 0
+        [ "$SET_E" = "$ELEMENT" ] && return 0
     done
     return 3
 }
