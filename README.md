@@ -3,6 +3,13 @@ wplib
 
 [wp-cli](https://github.com/wp-cli/wp-cli) shell scripts to manage several websites
 
+#### Install wp-cli
+
+```bash
+wget -O/usr/local/bin/wp https://raw.github.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && chmod +x /usr/local/bin/wp
+```
+
+
 ### COMMAND SUMMARY
 
 ```
