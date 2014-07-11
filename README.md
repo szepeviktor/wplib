@@ -7,6 +7,8 @@ wplib
 
 ```bash
 wget -O/usr/local/bin/wp https://raw.github.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && chmod +x /usr/local/bin/wp
+## if you use the suhosin patch
+grep "[^;#]*suhosin\.executor\.include\.whitelist.*phar" /etc/php5/conf.d/suhosin*.ini || echo "enable phar in suhosin!"
 ```
 
 

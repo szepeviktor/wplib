@@ -6,7 +6,7 @@
 . /usr/local/bin/libbash
 
 WPLIBROOT="/usr/local/share/wplib"
-APCDEL="${WPLIBROOT}/apc-del-dir.php"
+OPCACHEDEL="${WPLIBROOT}/opcache-del-dir.php"
 ROBOTSUPDATES="${WPLIBROOT}/wp-robots-update.php"
 
 
@@ -43,22 +43,22 @@ function term_colors() {
 
 ## simple echo
 wp_log___() {
-    echo -e "$@"
+    echo -e "$*"
 }
 
 ## echo "wp" prepended in blue background without EOL
 wp_log__() {
-    echo -ne "${reset}${blueBG}${white}[wp]${reset} $@"
+    echo -ne "${reset}${blueBG}${white}[wp]${reset} $*"
 }
 
 ## echo with "wp" and with EOL
 wp_log() {
-    wp_log__ "$@"; echo
+    wp_log__ "$*"; echo
 }
 
 ## echo "wp" prepended in red background
 wp_error() {
-    echo -e "${reset}${bold}${redBG}${white}[wp]${reset} $@"
+    echo -e "${reset}${bold}${redBG}${white}[wp]${reset} $*"
 }
 
 ## set WPROOT global to current dir
@@ -81,16 +81,20 @@ get_owner() {
 
 ## call wp-cli with sudo
 do_wp__() {
-    which wp > /dev/null || die 99 "no wp-cli"
-    php -r 'exit((extension_loaded("suhosin") && strpos(ini_get("suhosin.executor.include.whitelist"), "phar") !== false )?0:1);' || die 99 "suhosin whitelist"
+    local RET
     [ -z "$WPLIB_PROFILE" ] || WPLIB_PSTART="$(date "+%s.%N")"
     sudo -u "$WPOWNER" -- /bin/bash -c "cd \"$WPROOT\"; wp \"\$@\"" wp "$@"
-    [ -z "$WPLIB_PROFILE" ] || (echo -n "${reset}${greenBG}${black}[wp]${reset} $@ ";
+    RET=$?
+    [ -z "$WPLIB_PROFILE" ] || (echo -n "${reset}${greenBG}${black}[wp]${reset} $*: ";
         echo "scale=3; $(date "+%s.%N")-${WPLIB_PSTART};" | bc -q) >&2
+    return "$RET"
 }
 
 ## check WPOWNER and WPROOT for wp-cli and sudo
 do_wp() {
+    php -r 'exit((extension_loaded("suhosin") && strpos(ini_get("suhosin.executor.include.whitelist"), "phar") !== false )?0:1);' \
+        || die 99 "suhosin whitelist"
+    which wp > /dev/null || die 99 "no wp-cli"
     [ -z "$WPOWNER" ] && die 97 "owner empty"
     [ -z "$WPROOT" ] && die 96 "wp root not set"
     do_wp__ "$@"
@@ -101,6 +105,7 @@ detect_wp() {
     # this set WPROOT also
     get_owner
     grep -q "debug: true" "${WPROOT}/wp-cli.yml" 2> /dev/null || return 3 # no wp-cli FIXME -> check wp-cli troughoutly
+
     do_wp core is-installed #|| die 4 "no wp"
 }
 
@@ -108,6 +113,7 @@ detect_wp() {
 detect_php_errors() {
     get_owner
     grep -q "debug: true" wp-cli.yml || return 3
+
     exec 3>/dev/null
     do_wp option get siteurl 2>&1 1>&3 | grep "PHP " && return 101
     do_wp eval 'echo 1;' 2>&1 1>&3 | grep "PHP " && return 102
@@ -118,24 +124,26 @@ detect_php_errors() {
 revert_permissions() {
     detect_wp || return 1
     wp_log "owner=${WPOWNER}"
+
     wp_log "reverting permissions..."
     chown -Rc ${WPOWNER}:${WPOWNER} "$WPROOT" #|| die 7 "chown error!"
 }
 
-## clear this WPROOT from APC opcode cache
+## clear this WPROOT from opcode cache
 ## needs: external php file
 clear_cache() {
-    wp_log__ "APC clearing reply: '"
-    php "$APCDEL" "$WPROOT"
+    wp_log__ "opcode cache clearing reply: '"
+    php "$OPCACHEDEL" "$WPROOT"
     local RET=$?
     wp_log___ "', exit code: ${RET}" # missing EOL
 }
 
-## update WP core, database and clear APC
+## update WP core, database and clear opcache
 update_core() {
     detect_wp || return 1 # no wp
     wp_log "owner=${WPOWNER}"
-    do_wp core update --force --version="$VERSION" || return 4 #"core update error!"
+    #FIXME do_wp core update --force --version="$VERSION" ??? || return 4 #"core update error!"
+    do_wp core update --force || return 4 #"core update error!"
     do_wp core update-db || return 5 #"db update error!"
     clear_cache
 }
@@ -144,13 +152,14 @@ update_core() {
 do_robots() {
     detect_wp || return 1 # no wp
     wp_log "owner=${WPOWNER}"
-    local ACTIVE="$(do_wp plugin list 2> /dev/null | grep 'pc-robotstxt' | cut -f2)"
-
-    if [ "$ACTIVE" != "active" ]
-    then
-        wp_log "no PC-Robots plugin"
-        return 2
-    fi
+#    local ACTIVE="$(do_wp plugin list --field=status --name=pc-robotstxt 2> /dev/null)"
+#
+#    if [ "$ACTIVE" != active ]
+#    then
+#        wp_log "no PC-Robots plugin"
+#        return 2
+#    fi
+## in ROBOTSUPDATES php: `if (false === is_plugin_active('pc-robotstxt/pc-robotstxt.php')) die(10);`
 
     do_wp eval-file "$ROBOTSUPDATES"
 }
@@ -193,8 +202,8 @@ plugin_changelog() {
     local PLUGIN="$1"
     [ -z "$PLUGIN" ] && return 2 # no plugin name
 
-    wget --quiet --output-file=- "http://api.wordpress.org/plugins/info/1.0/${PLUGIN}" \
-        | php -r '$seri=unserialize(stream_get_contents(STDIN)); echo "<h1>$seri->name</h1>".$seri->sections["changelog"];' \
+    wget --quiet --output-document=- "http://api.wordpress.org/plugins/info/1.0/${PLUGIN}" \
+        | php -r '$seri=unserialize(stream_get_contents(STDIN));echo "<h1>$seri->name</h1>".$seri->sections["changelog"];' \
         | elinks -force-html
 }
 
@@ -212,15 +221,16 @@ plugin_backup__() {
     local BCKDIR=~/wplib-bck
     local SITEURL="$(do_wp__ option get siteurl 2> /dev/null)"
     local SITENAME="${SITEURL#*//}"
-    ## backup file named "wplib-bck + sitename + today + plugin name_version"
-    local BCK="${BCKDIR}/${SITENAME//[^a-z]}-$(LC_ALL=C date "+%Y%m%d")-${PLUGIN}_${CURRENT}.tar.gz"
+    ## backup file name="wplib-bck + sitename + today + plugin name_version"
+    local BCK="${BCKDIR}/${SITENAME//[^a-z0-9]}-$(LC_ALL=C date "+%Y%m%d")-${PLUGIN}_${CURRENT}.tar.xz"
 
     wp_log "backing up: ${PLUGIN}"
     if ! mkdir -p "$BCKDIR"; then
         wp_error "cannot create dir: '${BCKDIR}'"
         return 3
     fi
-    tar --create --gzip --absolute-names --directory "$(dirname "$PLUGINDIR")" --file "$BCK" "$(basename "$PLUGINDIR")"
+    #no need --absolute-names
+    tar --create --xz --directory "$(dirname "$PLUGINDIR")" --file "$BCK" "$(basename "$PLUGINDIR")"
 }
 
 ## backup a plugin
@@ -350,7 +360,7 @@ plugin_update_except() {
 find_wpconfig(){
     [ -f "$(dirname "$WPROOT")/wp-config.php" ] && WPCONFIG="$(dirname "$WPROOT")/wp-config.php"
     [ -f "${WPROOT}/wp-config.php" ] && WPCONFIG="${WPROOT}/wp-config.php"
-    [ -z "$WPCONFIG" ] && return 1
+    ! [ -z "$WPCONFIG" ] || return 1
 }
 
 ## checks defines in wp-config.php, displays found and suggested
@@ -360,7 +370,8 @@ check_wpconfig(){
 
     find_wpconfig || return 2 # no wp-config
     for DEFINE in WPLANG WP_DEBUG WP_MAX_MEMORY_LIMIT WP_POST_REVISIONS WP_CACHE \
-        DISABLE_WP_CRON WP_AUTO_UPDATE_CORE DISALLOW_FILE_EDIT; do
+        DISABLE_WP_CRON AUTOMATIC_UPDATER_DISABLED DISALLOW_FILE_EDIT \
+        WP_USE_EXT_MYSQL; do
         if ! grep --color -Hn "define.*${DEFINE}" "$WPCONFIG"; then
             case "$DEFINE" in
                 WPLANG)
@@ -381,11 +392,14 @@ check_wpconfig(){
                 DISABLE_WP_CRON)
                     wp_error "define('DISABLE_WP_CRON', true);"
                 ;;
-                WP_AUTO_UPDATE_CORE)
-                    wp_error "define('WP_AUTO_UPDATE_CORE', true);"
+                AUTOMATIC_UPDATER_DISABLED)
+                    wp_error "define('AUTOMATIC_UPDATER_DISABLED', true);"
                 ;;
                 DISALLOW_FILE_EDIT)
                     wp_error "define('DISALLOW_FILE_EDIT', true);"
+                ;;
+                WP_USE_EXT_MYSQL)
+                    wp_error "define('WP_USE_EXT_MYSQL', false);"
                 ;;
             esac
         fi
@@ -429,7 +443,8 @@ mount_cache() {
     # create cache in RAM
     mkdir "$CACHEDIR" || return 7 # "cannot create new cache directory"
     chown ${WPOWNER}:${WPGROUP} "$CACHEDIR" || return 7 # "cannot set owner"
-    mount -t tmpfs -o size=${SIZE}m,uid=${WPOWNER},gid=${WPGROUP},mode=755 tmpfs "$CACHEDIR" || return 8 # "cannot mount ramdisk"
+#    mount -t tmpfs -o size=${SIZE}m,uid=${WPOWNER},gid=${WPGROUP},mode=755 tmpfs "$CACHEDIR" || return 8 # "cannot mount ramdisk"
+    mount -t tmpfs -o uid=${WPOWNER},gid=${WPGROUP},mode=755 tmpfs "$CACHEDIR" || return 8 # "cannot mount ramdisk"
 
     # move files back to ramdisk
     if [ -d "$CACHETEMPDIR" ]
@@ -480,28 +495,30 @@ check_yaml() {
 
     local WPYML="${WPROOT}/wp-cli.yml"
 
-    for OPTION in url user debug; do
+    for OPTION in url user debug skip-plugins; do
         if ! grep --color -Hn "^${OPTION}:" "$WPYML"; then
             case "$OPTION" in
                 url)
                     wp_error "user: $(do_wp__ option get siteurl 2> /dev/null)"
                 ;;
                 user)
-                    wp_error "user: $(do_wp__ user list --field=user_login 2> /dev/null | head -n 1)"
+                    wp_error "user: $(do_wp__ user list --field=user_login \
+                        --role=administrator --orderby=ID --number=1 2> /dev/null )"
                 ;;
                 debug)
                     wp_error "debug: true"
                 ;;
-                "core update")
-                    wp_error "core update:\n    locale: $(do_wp__ eval 'global $locale; echo $locale;' 2> /dev/null)"
+                skip-plugins)
+                    wp_error "skip-plugins: better-wp-security"
                 ;;
             esac
         fi
     done
+
     # two deep options
     for OPTION2 in "core update|locale"; do
         if ! (grep --color -Hn -A1 "^${OPTION2%|*}:" "$WPYML" \
-            && grep -A1 "^${OPTION2%|*}:" "$WPYML" | grep -q "\s*${OPTION2#*|}:"); then
+            && grep -A1 "^${OPTION2%|*}:" "$WPYML" | grep -q "^\s*${OPTION2#*|}:"); then
             case "$OPTION2" in
                 "core update|locale")
                     wp_error "core update:\n    locale: $(do_wp__ eval 'global $locale; echo $locale;' 2> /dev/null)"
@@ -514,9 +531,9 @@ check_yaml() {
 ## full setup of a new site
 full_setup() {
 
-    local WPLIBCONF=~/.wplib
+    local WPLIBCONF=~/.config/wplib/wplibrc
 
-    # sample .wplib config file
+    # sample wplibrc config file
     false && cat > "$WPLIBCONF" << WPLIBRC
 DBNAME="wpcdb"
 DBUSER="wpcuser"
@@ -531,6 +548,19 @@ TITLE="WordPress website"
 ADMINUSER="viktor"
 ADMINPASS="secret"
 ADMINEMAIL="viktor@szepe.net"
+
+# Database of WordPress sites
+SITELIST_DB="/root/.config/wplib/szerver-wp-sites.sqlite"
+
+# Amazon Glacier backup
+GCONFIG="/root/.config/glacier/glacier.cfg"
+GSERVER_VAULT="szerver4teszt"
+GSERVER_JOURNAL="/root/.config/glacier/journal/szerver4teszt.jnl"
+
+GBACKUP_DIR="/var/backups/wp-glacier"
+GLOG_FILE="/var/log/mtglacier.log"
+GFULLDATE="%Y%m%d%H%M"
+GKEEPDAYS="62"
 WPLIBRC
 
     if detect_wp;then
@@ -563,6 +593,7 @@ WPLIBRC
     wp_log "DB prefix: ${DBPREFIX}"
 
     # create database and user
+    #TODO existing user
     mysql --default-character-set=utf8 <<MYSQL || return 6 # "Couldn't setup up database (MySQL error: $?)"
 CREATE DATABASE IF NOT EXISTS \`${DBNAME}\`
     CHARACTER SET 'utf8'
@@ -576,7 +607,7 @@ MYSQL
     # generate wp-cli YAML
     cat <<YAML > "${WPROOT}/wp-cli.yml"
 url: ${URL}
-#user: ${ADMINUSER}
+user: ${ADMINUSER}
 debug: true
 core download:
   locale: ${LOCALE}
@@ -601,8 +632,20 @@ YAML
     # move wp-config to a secure place
     [ "$(basename "$WPROOT")" = server ] && mv -v "${WPROOT}/wp-config.php" "$(dirname "$WPROOT")"
     do_wp__ core install || return 12 # "Install failure"
-    # get around a bug "#user: ..."
-    sed -i 's/^#//g' "${WPROOT}/wp-cli.yml"
+    #TODO add webroot files
+    # favicon
+    cat << FAV | base64 -d | gzip -d > "${WPROOT}/favicon.ico"
+H4sIABpejFMCA6WRXUhTYRjH/3MjP3bRvInuUqnopqC82p2XkZEhYTRzkWdTY1nmLL9wxpyn6aZF
+QkROIt0gSwPXpGAq3swgrQgkC5bghcja2i7KMFdbz8t5eYeJVz7nOQfO8/7+z8f7ACp6dDrQdz/q
+1MA+AEfopRAKoMR3NM8cTkncB0OY+o5gDMEoXq/i0QyMN1B5HWW17Gg6wd1g5drcXJha8TKMiSU8
+ncPIFBz9uFKPE8XsiDCCE2nmvnFkZeHgYVyqRrcLr2YxOsGCnhEMPIShSnWgABoNrO2cJzfX42Qp
+upzpbZbt6MkvKVFrtawHwa/9wm0Z/QPovQunWyERDGHwCZ4H1I0trCUyUSL2B4srsDvReAt2mfO+
+MSah+OpPSBY+ppBEkwh/g80BWxfnu934uIzIb8RTDBASj4/9UpC6Cs3DdY/zdhkPhhDZyLQtTKkS
+3VS9+4Jnfs733YexGjc7MrwooUgo1cJnjAU439OHigvI0265SSHRaFTNNky/wfBoJv/ZcuTkbBlT
+kdC+aCnnzkN2Y3yS855hUIY92f/fjLKv02fEpJwf8uLtJ5iuZnoW/I8krG1o76R9PX7/4UV4mfH+
+ILvh9b+iZ71FcqcT5L2peOf62qGWpr11lnzJrDPVFLU1N0S+yptRVypOAJGFev1xySBN+oTkTjJ2
+0e89WmMsvlZ7zFx1OeBVYMWJxC7tH+5pKEN+AwAA
+FAV
 
     # set ownership to original owner
     chown -R $WPOWNER:$WPGROUP "$WPROOT" || return 12 # "Cannot set ownership"
@@ -617,14 +660,50 @@ autoload_estimate() {
     do_wp__ eval '$size=0;$opts = wp_load_alloptions();foreach($opts as $name=>$str)$size+=strlen($name.$str)+2;echo $size;'
 }
 
+check_root_files() {
+    detect_wp || return 1 # no wp
+    wp_log "owner=${WPOWNER}"
+
+    local SITEMAP=""
+
+    if do_wp__ plugin list --field=name --name=wordpress-seo --status=active \
+        | grep -q "wordpress-seo" \
+        && do_wp__ option get wpseo_xml | grep -q "'enablexmlsitemap' => true"; then
+        SITEMAP="sitemap_index.xml"
+    elif do_wp__ plugin list --field=name --name=google-sitemap-generator --status=active \
+        | grep -q "google-sitemap-generator"; then
+        SITEMAP="sitemap.xml"
+    elif [ -r "${WPROOT}/sitemap.xml.gz" ]; then
+        SITEMAP="sitemap.xml.gz"
+    elif [ -r "${WPROOT}/sitemap.xml" ]; then
+        SITEMAP="sitemap.xml"
+    else
+        wp_error "sitemap not found"
+        return 2 # no sitemap
+    fi
+
+    local ROOTFILES=( .htaccess wp-cli.yml favicon.ico \
+        apple-touch-icon.png apple-touch-icon-precomposed.png \
+        browserconfig.xml crossdomain.xml googlec68b92baad131042.html )
+    local VIRTUALFILES=( robots.txt "${SITEMAP}" )
+    local SITEURL="$(do_wp__ option get siteurl 2> /dev/null)"
+
+    [ -z "$SITEURL" ] && return 3 # no siteurl
+
+    for FILE in ${ROOTFILES[*]}; do
+        [ -r "$FILE" ] || wp_error "root file not found: ${FILE}"
+    done
+    for FILE in ${VIRTUALFILES[*]}; do
+        wget -qO /dev/null -t 3 -T 1 "${SITEURL}/${FILE}" || wp_error "file download failure: ${FILE}"
+    done
+}
+
 
 ## sample function, don't forget about detect_wp and wp_log and returns
 _sample_func() {
     local VAR="$1"
     [ -z "$VAR" ] || die ....
 
-    detect_wp || return 1 # no wp
-    wp_log "owner=${WPOWNER}"
 
     do_wp core ........ || return 1
 }

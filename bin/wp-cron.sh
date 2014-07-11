@@ -3,7 +3,6 @@
 
 WPCRON_PATH="server/wp-cron.php"
 
-
 DIR="$1"
 [ -d "$DIR" ] || exit 1
 
@@ -23,15 +22,15 @@ export REQUEST_METHOD="GET"
 
 ## Host: <domain.net:port>
 ## User-Agent: Mozilla/5.0 ...
-#export HTTP_HOST=""
+#export HTTP_HOST="<domain.net>"
 export HTTP_USER_AGENT="php-cli"
 
 ##################################
 
 pushd "$DIR" > /dev/null || exit 2
 
-[ -r "${WPCRON_PATH}" ] || exit 3
-/usr/bin/php "${WPCRON_PATH}" || echo "[wp-cron] PHP error: $?, ${PWD}" >&2
+[ -r "$WPCRON_PATH" ] || exit 3
+/usr/bin/php "$WPCRON_PATH" || echo "[wp-cron] PHP error: $?, $(pwd)" >&2
 
 popd > /dev/null
 

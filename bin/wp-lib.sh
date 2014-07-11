@@ -1,6 +1,6 @@
 #!/bin/bash
 
-WPLIB_VERSION="1.1"
+WPLIB_VERSION="0.1"
 
 
 . /usr/local/share/wplib/wp-libwp.sh
@@ -18,12 +18,13 @@ Turn on profiling by setting WPLIB_PROFILE environment variable.
   chown                           revert the owner of all files recursively
   detect-wp                       detect WordPress installation
   detect-php-errors               detect PHP errors while running wp-cli
+  check-yaml                      check wp-cli.yml in the root directory
   do-wp <COMMAND>                 execute any wp-cli command
   full-setup                      full setup with DB user creation
-                                  setting are read from ~/.wplib
+                                  setting are read from wplibrc
   update-core                     update WordPress core
   clear-cache                     clear this WordPress installation
-                                  from APC opcode cache
+                                  from opcode cache
   do-robots                       update robots.txt
   itsec-screen <USER>             hide certain elements for the given user
                                   from iThemes Security admin pages
@@ -40,6 +41,7 @@ Turn on profiling by setting WPLIB_PROFILE environment variable.
                                   only root can mount tmpfs, size is in MB
   umount-cache                    un-mount WP cache directory
   autoload-estimate               estimate overall size of autoload options
+  check-root-files                check must-have files in WordPress root
   help                            display this help and exit
   version                         display wp-lib version
   help-aliases                    list command aliases
@@ -54,8 +56,9 @@ HLP
 }
 
 
+RET="0"
 _ROOT="${1#--root=}"
-if [ ! "${_ROOT}" = "$1" ]; then
+if [ "${_ROOT}" != "$1" ]; then
     shift
     #wp_log__ "entering: "
 # FIXME this won't work if ROOT has perms like 750
@@ -74,7 +77,7 @@ case "$COMMAND" in
         wp_log "wp-lib $WPLIB_VERSION"
     ;;
     help-aliases | aliases)#
-        grep "^[ a-z|-]*)#$" "$0" | cut -d')' -f1
+        grep "^[ a-z|-]*)#\$" "$0" | cut -d')' -f1
     ;;
     get-owner | owner)#
         get_owner
@@ -83,10 +86,12 @@ case "$COMMAND" in
     revert-permissions | permissions | chown)#
         [ -d "${_ROOT}" ] || die 1 "no valid dir"
         revert_permissions
+        RET="$?"
     ;;
     detect-wp | detect)#
         detect_wp
-        if [ $? = 0 ]; then
+        RET="$?"
+        if [ "$RET" = 0 ]; then
             wp_log "wp is installed"
         else
             wp_error "NO wp here!"
@@ -94,63 +99,67 @@ case "$COMMAND" in
     ;;
     detect-php-errors | detect-errors)#
         detect_php_errors
-        RET=$?
+        RET="$?"
         if [ "$RET" = 0 ]; then
             wp_log "no PHP errors"
         elif [ "$RET" = 101 ]; then
             wp_error "wp option get siteurl caused errors: $RET"
         elif [ "$RET" = 102 ]; then
             wp_error "wp eval 'echo 1;' caused errors: $RET"
-        else
-            wp_error "error: $RET"
         fi
     ;;
     do-wp | dowp | sudo)#
         get_owner
         do_wp "$@"
-        wp_log "exit code: $?"
+        RET="$?"
     ;;
     update-core | update | core-update)#
         update_core
-        wp_log "exit code: $?"
+        RET="$?"
     ;;
-    clear-cache | apc-clear | apc)#
+    clear-cache | opcache-clear | opcache | apc-clear | apc)#
         set_root
         clear_cache
+        RET="$?"
     ;;
     do-robots | update-robots)#
         do_robots
-        wp_log "exit code: $?"
+        RET="$?"
     ;;
     itsec-screen | bwps-screen)#
         itsec_screen "$1" # <USER>
+        RET="$?"
     ;;
     plugin-changelog | changelog)#
         plugin_changelog "$1" # <PLUGIN>
+        RET="$?"
     ;;
     plugin-minor-updates | plugin-minor)#
         plugin_minor_updates "$1" # --second
+        RET="$?"
     ;;
     plugin-update-except | plugin-except)#
         plugin_update_except $@
+        RET="$?"
     ;;
     # like in drush
     plugin-update-backup | plugin-update)#
         plugin_update_backup
+        RET="$?"
     ;;
     plugin-backup | backup-plugin)#
         plugin_backup "$1" # <PLUGIN>
+        RET="$?"
     ;;
     check-wpconfig | check-config | configtest)#
         check_wpconfig
+        RET="$?"
     ;;
     mount-cache | mount)#
         mount_cache "$1"
         RET=$?
         if [ "$RET" = 0 ]; then
             wp_log "mount OK"
-        else
-            wp_error "mount failure: $RET"
         fi
     ;;
     umount-cache | umount | unmount)#
@@ -158,27 +167,28 @@ case "$COMMAND" in
         RET=$?
         if [ "$RET" = 0 ]; then
             wp_log "umount OK"
-        else
-            wp_error "umount failure: $RET"
         fi
     ;;
     check-yaml | yaml)#
         check_yaml
-        wp_log "exit code: $?"
+        RET="$?"
     ;;
     full-setup | setup )#
         full_setup
         RET=$?
         if [ "$RET" = 0 ]; then
             wp_log "setup OK."
-        else
-            wp_error "setup error: $RET"
         fi
     ;;
     autoload-estimate | autoload)#
         wp_log__ "autoload size="
         autoload_estimate
+        RET=$?
         wp_log___
+    ;;
+    check-root-files | check-files | check-root)#
+        check_root_files
+        RET=$?
     ;;
     *)
         wp_error "'${COMMAND}' is not a registered wp command"
@@ -202,3 +212,5 @@ if [ "$(eval echo `dirs`)" != "$(pwd)" ]; then
     popd > /dev/null
 fi
 
+[ "$RET" = 0 ] || wp_error "error: $RET"
+exit "$RET"
