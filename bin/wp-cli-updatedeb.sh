@@ -32,7 +32,7 @@ pushd "$DIR"
 [ -r DEBIAN/control ] || (mkdir DEBIAN; dump_control)
 [ -d usr/bin ] || mkdir -p usr/bin
 
-wget2 -O usr/bin/wp "https://raw.github.com/wp-cli/builds/gh-pages/phar/wp-cli.phar" \
+wget -O /usr/local/bin/wp "https://raw.github.com/wp-cli/builds/gh-pages/phar/wp-cli.phar" \
     || die 4 "download failure"
 
 WPCLI_VER="$(grep -a "define.*WP_CLI_VERSION" usr/bin/wp | cut -d"'" -f4)"
