@@ -168,6 +168,7 @@ do_robots() {
 ## param: user
 itsec_screen() {
     local USER="$1"
+    local ITSEC_EVERY_PAGE='"itsec_security_updates","itsec_need_help","itsec_get_backup","itsec_sync_integration"'
 
     detect_wp || return 1 # no wp
     wp_log "owner=${WPOWNER}"
@@ -181,15 +182,15 @@ itsec_screen() {
     do_wp__ user meta delete "$USER" screen_layout_security_page_toplevel_page_itsec_logs
 
     do_wp__ user meta update "$USER" metaboxhidden_toplevel_page_itsec \
-        '["itsec_get_started","itsec_security_updates","itsec_need_help","itsec_get_backup"]'  --format=json
+        '["itsec_get_started",'"$ITSEC_EVERY_PAGE"']' --format=json
     do_wp__ user meta update "$USER" metaboxhidden_security_page_toplevel_page_itsec_settings \
-        '["ssl_options","itsec_security_updates","itsec_need_help","itsec_get_backup"]'  --format=json
+        '["ssl_options",'"$ITSEC_EVERY_PAGE"']' --format=json
     do_wp__ user meta update "$USER" metaboxhidden_security_page_toplevel_page_itsec_advanced \
-        '["advanced_intro","itsec_security_updates","itsec_need_help","itsec_get_backup"]'  --format=json
+        '["advanced_intro",'"$ITSEC_EVERY_PAGE"']' --format=json
     do_wp__ user meta update "$USER" metaboxhidden_security_page_toplevel_page_itsec_backups \
-        '["backup_description","backupbuddy_info","itsec_security_updates","itsec_need_help","itsec_get_backup"]'  --format=json
+        '["backup_description","backupbuddy_info",'"$ITSEC_EVERY_PAGE"']' --format=json
     do_wp__ user meta update "$USER" metaboxhidden_security_page_toplevel_page_itsec_logs \
-        '["itsec_log_header","itsec_security_updates","itsec_need_help","itsec_get_backup"]'  --format=json
+        '["itsec_log_header",'"$ITSEC_EVERY_PAGE"']' --format=json
     do_wp__ user meta update "$USER" screen_layout_security_page_toplevel_page_itsec_logs \
         '"1"' --format=json
 }
@@ -369,37 +370,38 @@ check_wpconfig(){
     wp_log "owner=${WPOWNER}"
 
     find_wpconfig || return 2 # no wp-config
+
     for DEFINE in WPLANG WP_DEBUG WP_MAX_MEMORY_LIMIT WP_POST_REVISIONS WP_CACHE \
         DISABLE_WP_CRON AUTOMATIC_UPDATER_DISABLED DISALLOW_FILE_EDIT \
         WP_USE_EXT_MYSQL; do
         if ! grep --color -Hn "define.*${DEFINE}" "$WPCONFIG"; then
             case "$DEFINE" in
                 WPLANG)
-                    wp_error "define('WPLANG', 'hu_HU');"
+                    wp_error "define( 'WPLANG', 'hu_HU' );"
                 ;;
                 WP_DEBUG)
-                    wp_error "define('WP_DEBUG', false);"
+                    wp_error "define( 'WP_DEBUG', false );"
                 ;;
                 WP_MAX_MEMORY_LIMIT)
-                    wp_error "define('WP_MAX_MEMORY_LIMIT', '127M');"
+                    wp_error "define( 'WP_MAX_MEMORY_LIMIT', '127M' );"
                 ;;
                 WP_POST_REVISIONS)
-                    wp_error "define('WP_POST_REVISIONS', 10);"
+                    wp_error "define( 'WP_POST_REVISIONS', 10 );"
                 ;;
                 WP_CACHE)
-                    wp_error "define('WP_CACHE', true);"
+                    wp_error "define( 'WP_CACHE', true );"
                 ;;
                 DISABLE_WP_CRON)
-                    wp_error "define('DISABLE_WP_CRON', true);"
+                    wp_error "define( 'DISABLE_WP_CRON', true );"
                 ;;
                 AUTOMATIC_UPDATER_DISABLED)
-                    wp_error "define('AUTOMATIC_UPDATER_DISABLED', true);"
+                    wp_error "define( 'AUTOMATIC_UPDATER_DISABLED', true );"
                 ;;
                 DISALLOW_FILE_EDIT)
-                    wp_error "define('DISALLOW_FILE_EDIT', true);"
+                    wp_error "define( 'DISALLOW_FILE_EDIT', true );"
                 ;;
                 WP_USE_EXT_MYSQL)
-                    wp_error "define('WP_USE_EXT_MYSQL', false);"
+                    wp_error "define( 'WP_USE_EXT_MYSQL', false );"
                 ;;
             esac
         fi
@@ -443,7 +445,7 @@ mount_cache() {
     # create cache in RAM
     mkdir "$CACHEDIR" || return 7 # "cannot create new cache directory"
     chown ${WPOWNER}:${WPGROUP} "$CACHEDIR" || return 7 # "cannot set owner"
-#    mount -t tmpfs -o size=${SIZE}m,uid=${WPOWNER},gid=${WPGROUP},mode=755 tmpfs "$CACHEDIR" || return 8 # "cannot mount ramdisk"
+#no size    mount -t tmpfs -o size=${SIZE}m,uid=${WPOWNER},gid=${WPGROUP},mode=755 tmpfs "$CACHEDIR" || return 8 # "cannot mount ramdisk"
     mount -t tmpfs -o uid=${WPOWNER},gid=${WPGROUP},mode=755 tmpfs "$CACHEDIR" || return 8 # "cannot mount ramdisk"
 
     # move files back to ramdisk
@@ -499,7 +501,7 @@ check_yaml() {
         if ! grep --color -Hn "^${OPTION}:" "$WPYML"; then
             case "$OPTION" in
                 url)
-                    wp_error "user: $(do_wp__ option get siteurl 2> /dev/null)"
+                    wp_error "url: $(do_wp__ option get siteurl 2> /dev/null)"
                 ;;
                 user)
                     wp_error "user: $(do_wp__ user list --field=user_login \
@@ -533,36 +535,6 @@ full_setup() {
 
     local WPLIBCONF=~/.config/wplib/wplibrc
 
-    # sample wplibrc config file
-    false && cat > "$WPLIBCONF" << WPLIBRC
-DBNAME="wpcdb"
-DBUSER="wpcuser"
-#DBPASS="<will be filled in with a 12 characters long random password>"
-#DBPREFIX="<a secure prefix will be generated>"
-
-LOCALE="hu_HU"
-
-URL="http://wordpress.tk"
-TITLE="WordPress website"
-
-ADMINUSER="viktor"
-ADMINPASS="secret"
-ADMINEMAIL="viktor@szepe.net"
-
-# Database of WordPress sites
-SITELIST_DB="/root/.config/wplib/szerver-wp-sites.sqlite"
-
-# Amazon Glacier backup
-GCONFIG="/root/.config/glacier/glacier.cfg"
-GSERVER_VAULT="szerver4teszt"
-GSERVER_JOURNAL="/root/.config/glacier/journal/szerver4teszt.jnl"
-
-GBACKUP_DIR="/var/backups/wp-glacier"
-GLOG_FILE="/var/log/mtglacier.log"
-GFULLDATE="%Y%m%d%H%M"
-GKEEPDAYS="62"
-WPLIBRC
-
     if detect_wp;then
         wp_error "WP is already installed here!"
         return 1
@@ -572,10 +544,11 @@ WPLIBRC
 
     # get data from .wplib
     [ -r "$WPLIBCONF" ] || return 3
-    wp_log "reading data from .wplib"
+    wp_log "reading data from wplibrc"
+
+    # ( now - WPLIB_MTIME ) > 1 hour
     local WPLIB_MTIME="$(stat --format "%Y" "$WPLIBCONF")"
-    # now - WPLIB_MTIME > 1 hour
-    [ "$(echo "`date "+%s"`-${WPLIB_MTIME};" | bc -q)" -gt 3600 ] && wp_error ".wplib is older than one hour"
+    [ "$(echo "`date "+%s"`-${WPLIB_MTIME};" | bc -q)" -gt 3600 ] && wp_error "wplibrc is older than one hour"
 
     . "$WPLIBCONF"
     [ -z "$DBNAME" ] || [ -z "$DBUSER" ] || [ -z "$LOCALE" ] || [ -z "$URL" ] \
@@ -629,10 +602,15 @@ YAML
 
     do_wp__ core download || return 10 # "download failure"
     do_wp__ core config || return 11 # "config failure"
+
     # move wp-config to a secure place
     [ "$(basename "$WPROOT")" = server ] && mv -v "${WPROOT}/wp-config.php" "$(dirname "$WPROOT")"
     do_wp__ core install || return 12 # "Install failure"
-    #TODO add webroot files
+
+    # webroot files
+    touch "${WPROOT}/browserconfig.xml" "${WPROOT}/crossdomain.xml" \
+        "${WPROOT}/apple-touch-icon.png" "${WPROOT}/apple-touch-icon-precomposed.png"
+
     # favicon
     cat << FAV | base64 -d | gzip -d > "${WPROOT}/favicon.ico"
 H4sIABpejFMCA6WRXUhTYRjH/3MjP3bRvInuUqnopqC82p2XkZEhYTRzkWdTY1nmLL9wxpyn6aZF
