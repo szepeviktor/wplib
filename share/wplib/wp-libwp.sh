@@ -104,9 +104,12 @@ do_wp() {
 detect_wp() {
     # this set WPROOT also
     get_owner
-    grep -q "debug: true" "${WPROOT}/wp-cli.yml" 2> /dev/null || return 3 # no wp-cli FIXME -> check wp-cli troughoutly
+    if ! grep -q "debug: true" "${WPROOT}/wp-cli.yml" 2> /dev/null \
+        && ! grep -q "debug: true" "$(dirname "$WPROOT")/wp-cli.yml" 2> /dev/null; then
+        return 3 # no wp-cli FIXME -> check wp-cli troughoutly
+    fi
 
-    do_wp core is-installed #|| die 4 "no wp"
+    do_wp core is-installed # "no wp"
 }
 
 ## PHP errors while running wp-cli
@@ -359,8 +362,13 @@ plugin_update_except() {
 ## find wp-config.php
 ## sets: WPCONFIG
 find_wpconfig(){
-    [ -f "$(dirname "$WPROOT")/wp-config.php" ] && WPCONFIG="$(dirname "$WPROOT")/wp-config.php"
+    # normal
     [ -f "${WPROOT}/wp-config.php" ] && WPCONFIG="${WPROOT}/wp-config.php"
+    # above
+    [ -f "$(dirname "$WPROOT")/wp-config.php" ] && WPCONFIG="$(dirname "$WPROOT")/wp-config.php"
+    # secret
+    [ -f "${WPROOT}/${SECRET_DIR_NAME}/wp-config.php" ] && WPCONFIG="${WPROOT}/${SECRET_DIR_NAME}/wp-config.php"
+
     ! [ -z "$WPCONFIG" ] || return 1
 }
 
@@ -534,8 +542,10 @@ check_yaml() {
 full_setup() {
 
     local WPLIBCONF=~/.config/wplib/wplibrc
+    local WPSECRET="$1"
+    local YAML_PATH
 
-    if detect_wp;then
+    if detect_wp; then
         wp_error "WP is already installed here!"
         return 1
     fi
@@ -554,6 +564,15 @@ full_setup() {
     [ -z "$DBNAME" ] || [ -z "$DBUSER" ] || [ -z "$LOCALE" ] || [ -z "$URL" ] \
         || [ -z "$TITLE" ] || [ -z "$ADMINUSER" ] || [ -z "$ADMINPASS" ] || [ -z "$ADMINEMAIL" ] && return 4
 
+    # secret subdir install
+    if [ "$WPSECRET" = "--secret" ] \
+        && ! [ -z "$STATIC_DIR_NAME" ] \
+        && ! [ -z "$SECRET_DIR_NAME" ]; then
+        WPSECRET="1"
+    else
+        unset WPSECRET
+    fi
+
     # mysql credentials in .my.cnf
     mysql --execute="EXIT" || return 5 # 'Please add \n[mysql]\nuser = ...\npassword = ...\nto ~/.my.cnf!'
 
@@ -566,19 +585,24 @@ full_setup() {
     wp_log "DB prefix: ${DBPREFIX}"
 
     # create database and user
-    #TODO existing user
     mysql --default-character-set=utf8 <<MYSQL || return 6 # "Couldn't setup up database (MySQL error: $?)"
 CREATE DATABASE IF NOT EXISTS \`${DBNAME}\`
     CHARACTER SET 'utf8'
     COLLATE 'utf8_general_ci';
-CREATE USER '${DBUSER}'@'localhost' IDENTIFIED BY '${DBPASS}';
+-- CREATE USER '${DBUSER}'@'localhost' IDENTIFIED BY '${DBPASS}';
 GRANT ALL PRIVILEGES ON \`${DBNAME}\`.* TO '${DBUSER}'@'localhost'
     IDENTIFIED BY '${DBPASS}';
 FLUSH PRIVILEGES;
 MYSQL
 
     # generate wp-cli YAML
-    cat <<YAML > "${WPROOT}/wp-cli.yml"
+    wp_log "generating wp-cli.yaml"
+    if [ "$(basename "$WPROOT")" = server ]; then
+        YAML_PATH="$(dirname "$WPROOT")/wp-cli.yml"
+    else
+        YAML_PATH="${WPROOT}/wp-cli.yml"
+    fi
+    sudo -u "$WPOWNER" -- cat <<YAML > "$YAML_PATH" || return 7 # YAML creation failure
 url: ${URL}
 user: ${ADMINUSER}
 debug: true
@@ -591,28 +615,84 @@ core config:
   dbuser: ${DBUSER}
   dbpass: ${DBPASS}
   dbprefix: ${DBPREFIX}
-  extra-php
 core install:
-  url: ${URL%/}
   title: ${TITLE}
   admin_user: ${ADMINUSER}
   admin_password: ${ADMINPASS}
   admin_email: ${ADMINEMAIL}
+#  url: ${URL%/}  https://github.com/wp-cli/wp-cli/issues/1286
+skip-plugins: better-wp-security
 YAML
+    sudo -u "$WPOWNER" -- chmod 640 "$YAML_PATH"
 
     do_wp__ core download || return 10 # "download failure"
-    do_wp__ core config || return 11 # "config failure"
 
-    # move wp-config to a secure place
-    [ "$(basename "$WPROOT")" = server ] && mv -v "${WPROOT}/wp-config.php" "$(dirname "$WPROOT")"
-    do_wp__ core install || return 12 # "Install failure"
+    if [ "$WPSECRET" = 1 ]; then
+        # secret dir
+        sudo -u "$WPOWNER" -- mkdir "${WPROOT}/$SECRET_DIR_NAME" || return 14 # "secret dir creation failure"
+        sudo -u "$WPOWNER" -- find "$WPROOT" -mindepth 1 -maxdepth 1 -not -name "wp-content" -not -name "$SECRET_DIR_NAME" \
+            -exec mv \{\} "${WPROOT}/${SECRET_DIR_NAME}" \; || return 15 # "move to secret"
+
+        # static dir
+        sudo -u "$WPOWNER" -- mv "${WPROOT}/wp-content" "${WPROOT}/${STATIC_DIR_NAME}" || return 16 # "rename to static"
+
+        # main index.php
+        sudo -u "$WPOWNER" -- cp "${WPROOT}/${SECRET_DIR_NAME}/index.php" "${WPROOT}" || return 17 # "copying index.php"
+        sudo -u "$WPOWNER" -- sed -i "s|'/wp-blog-header.php'|'/${SECRET_DIR_NAME}/wp-blog-header.php'|" index.php || return 18 # modifying index.php
+
+        # do core config, options from YAML
+        cat <<WPCFG | do_wp__ core config --extra-php || return 18 # "config failure"
+//define( 'WP_DEBUG', false );
+define( 'WP_DEBUG', true );
+
+define( 'WP_CONTENT_DIR', '/var/www/subdirwp/server/$STATIC_DIR_NAME' );
+define( 'WP_CONTENT_URL', 'http://subdir.wp/$STATIC_DIR_NAME' );
+
+define( 'WP_MAX_MEMORY_LIMIT', '127M' );
+define( 'WP_USE_EXT_MYSQL', false );
+define( 'WP_POST_REVISIONS', 10 );
+define( 'DISALLOW_FILE_EDIT', true );
+
+define( 'DISABLE_WP_CRON', true );
+define( 'AUTOMATIC_UPDATER_DISABLED', true );
+define( 'WP_CACHE', true );
+WPCFG
+        sudo -u "$WPOWNER" -- chmod 640 "${WPROOT}/${SECRET_DIR_NAME}/wp-config.php" || return 21 # "chown error"
+
+        do_wp__ core install "--url=${URL}/${SECRET_DIR_NAME}" || return 19 # "core install failure"
+
+        # revert home URL
+        do_wp__ option set home "$URL" || return 20 # "install failure"
+    else
+        cat <<WPCFG | do_wp__ core config --extra-php || return 11 # "core config failure"
+//define( 'WP_DEBUG', false );
+define( 'WP_DEBUG', true );
+
+define( 'WP_MAX_MEMORY_LIMIT', '127M' );
+define( 'WP_USE_EXT_MYSQL', false );
+define( 'WP_POST_REVISIONS', 10 );
+define( 'DISALLOW_FILE_EDIT', true );
+
+define( 'DISABLE_WP_CRON', true );
+define( 'AUTOMATIC_UPDATER_DISABLED', true );
+define( 'WP_CACHE', true );
+WPCFG
+        sudo -u "$WPOWNER" -- chmod 640 "${WPROOT}/wp-config.php" || return 22 # "chown error"
+
+        # move wp-config to a secure place
+        if [ "$(basename "$WPROOT")" = server ]; then
+            sudo -u "$WPOWNER" -- mv -v "${WPROOT}/wp-config.php" "$(dirname "$WPROOT")"
+        fi
+
+        do_wp__ core install "--url=${URL}" || return 12 # "install failure"
+    fi
 
     # webroot files
-    touch "${WPROOT}/browserconfig.xml" "${WPROOT}/crossdomain.xml" \
+    sudo -u "$WPOWNER" -- touch "${WPROOT}/browserconfig.xml" "${WPROOT}/crossdomain.xml" \
         "${WPROOT}/apple-touch-icon.png" "${WPROOT}/apple-touch-icon-precomposed.png"
 
     # favicon
-    cat << FAV | base64 -d | gzip -d > "${WPROOT}/favicon.ico"
+    cat << FAV | base64 -d | sudo -u "$WPOWNER" -- gzip -d > "${WPROOT}/favicon.ico"
 H4sIABpejFMCA6WRXUhTYRjH/3MjP3bRvInuUqnopqC82p2XkZEhYTRzkWdTY1nmLL9wxpyn6aZF
 QkROIt0gSwPXpGAq3swgrQgkC5bghcja2i7KMFdbz8t5eYeJVz7nOQfO8/7+z8f7ACp6dDrQdz/q
 1MA+AEfopRAKoMR3NM8cTkncB0OY+o5gDMEoXq/i0QyMN1B5HWW17Gg6wd1g5drcXJha8TKMiSU8
@@ -626,7 +706,7 @@ ILvh9b+iZ71FcqcT5L2peOf62qGWpr11lnzJrDPVFLU1N0S+yptRVypOAJGFev1xySBN+oTkTjJ2
 FAV
 
     # set ownership to original owner
-    chown -R $WPOWNER:$WPGROUP "$WPROOT" || return 12 # "Cannot set ownership"
+    chown -R $WPOWNER:$WPGROUP "$WPROOT" || return 13 # "Cannot set ownership"
 
     check_wpconfig
 }
