@@ -1,0 +1,31 @@
+# sample wplibrc config file
+# location: ~/.config/wplib/wplibrc
+
+DBNAME="wpcdb"
+DBUSER="wpcuser"
+
+#DBPASS="<will be filled in with a 12 characters long random password>"
+#DBPREFIX="<a secure prefix will be generated>"
+
+LOCALE="hu_HU"
+
+URL="http://wordpress.tk"
+TITLE="WordPress website"
+
+ADMINUSER="viktor"
+ADMINPASS="secret"
+ADMINEMAIL="viktor@szepe.net"
+
+# Database of WordPress sites
+SITELIST_DB="/root/.config/wplib/szerver-wp-sites.sqlite"
+
+# Amazon Glacier backup
+GCONFIG="/root/.config/glacier/glacier.cfg"
+GSERVER_VAULT="szerver4teszt"
+GSERVER_JOURNAL="/root/.config/glacier/journal/szerver4teszt.jnl"
+
+GBACKUP_DIR="/var/backups/wp-glacier"
+GLOG_FILE="/var/log/mtglacier.log"
+GFULLDATE="%Y%m%d%H%M"
+GKEEPDAYS="62"
+
