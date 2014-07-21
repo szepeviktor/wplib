@@ -25,10 +25,10 @@ Turn on profiling by setting WPLIB_PROFILE environment variable.
   detect-wp                       detect WordPress installation
   detect-php-errors               detect PHP errors while running wp-cli
   do-wp <COMMAND>                 execute any wp-cli command
-  full-setup                      full setup with DB user creation
+  full-setup --secret             full setup with DB user creation
   update-core                     update WordPress core
   clear-cache                     clear this WordPress installation
-                                  from APC opcode cache
+                                  from opcode cache
   do-robots                       update robots.txt
   itsec-screen <USER>             hide certain elements for the given user
                                   from iThemes Security admin pages
