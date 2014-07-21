@@ -20,7 +20,7 @@ Turn on profiling by setting WPLIB_PROFILE environment variable.
   detect-php-errors               detect PHP errors while running wp-cli
   check-yaml                      check wp-cli.yml in the root directory
   do-wp <COMMAND>                 execute any wp-cli command
-  full-setup                      full setup with DB user creation
+  full-setup --secret             full setup with DB user creation
                                   setting are read from wplibrc
   update-core                     update WordPress core
   clear-cache                     clear this WordPress installation
@@ -139,7 +139,7 @@ case "$COMMAND" in
         RET="$?"
     ;;
     plugin-update-except | plugin-except)#
-        plugin_update_except $@
+        plugin_update_except "$@"
         RET="$?"
     ;;
     # like in drush
@@ -156,15 +156,15 @@ case "$COMMAND" in
         RET="$?"
     ;;
     mount-cache | mount)#
-        mount_cache "$1"
-        RET=$?
+        mount_cache "$1" # <SIZE>
+        RET="$?"
         if [ "$RET" = 0 ]; then
             wp_log "mount OK"
         fi
     ;;
     umount-cache | umount | unmount)#
         umount_cache
-        RET=$?
+        RET="$?"
         if [ "$RET" = 0 ]; then
             wp_log "umount OK"
         fi
@@ -174,8 +174,8 @@ case "$COMMAND" in
         RET="$?"
     ;;
     full-setup | setup )#
-        full_setup
-        RET=$?
+        full_setup "$1" # --secret
+        RET="$?"
         if [ "$RET" = 0 ]; then
             wp_log "setup OK."
         fi
@@ -183,12 +183,12 @@ case "$COMMAND" in
     autoload-estimate | autoload)#
         wp_log__ "autoload size="
         autoload_estimate
-        RET=$?
+        RET="$?"
         wp_log___
     ;;
     check-root-files | check-files | check-root)#
         check_root_files
-        RET=$?
+        RET="$?"
     ;;
     *)
         wp_error "'${COMMAND}' is not a registered wp command"
