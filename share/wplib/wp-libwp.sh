@@ -629,7 +629,7 @@ YAML
 
     if [ "$WPSECRET" = 1 ]; then
         # secret dir
-        sudo -u "$WPOWNER" -- mkdir "${WPROOT}/$SECRET_DIR_NAME" || return 14 # "secret dir creation failure"
+        sudo -u "$WPOWNER" -- mkdir "${WPROOT}/${SECRET_DIR_NAME}" || return 14 # "secret dir creation failure"
         sudo -u "$WPOWNER" -- find "$WPROOT" -mindepth 1 -maxdepth 1 -not -name "wp-content" -not -name "$SECRET_DIR_NAME" \
             -exec mv \{\} "${WPROOT}/${SECRET_DIR_NAME}" \; || return 15 # "move to secret"
 
@@ -637,8 +637,11 @@ YAML
         sudo -u "$WPOWNER" -- mv "${WPROOT}/wp-content" "${WPROOT}/${STATIC_DIR_NAME}" || return 16 # "rename to static"
 
         # main index.php
-        sudo -u "$WPOWNER" -- cp "${WPROOT}/${SECRET_DIR_NAME}/index.php" "${WPROOT}" || return 17 # "copying index.php"
+        sudo -u "$WPOWNER" -- cp "${WPROOT}/${SECRET_DIR_NAME}/index.php" "$WPROOT" || return 17 # "copying index.php"
         sudo -u "$WPOWNER" -- sed -i "s|'/wp-blog-header.php'|'/${SECRET_DIR_NAME}/wp-blog-header.php'|" index.php || return 18 # modifying index.php
+
+        # /wp-config.php fail2ban trap
+        sudo -u "$WPOWNER" -- tee "${WPROOT}/wp-config.php" > /dev/null <<< '<?php for ( $i = 1; $i <= 6; $i++ ) { error_log( "File does not exist: " . "login_no-wp-here" ); } exit;'
 
         # do core config, options from YAML
         cat <<WPCFG | do_wp__ core config --extra-php || return 18 # "config failure"
