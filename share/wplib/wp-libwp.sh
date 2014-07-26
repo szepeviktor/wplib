@@ -602,7 +602,7 @@ MYSQL
     else
         YAML_PATH="${WPROOT}/wp-cli.yml"
     fi
-    sudo -u "$WPOWNER" -- cat <<YAML > "$YAML_PATH" || return 7 # YAML creation failure
+    sudo -u "$WPOWNER" -- tee "$YAML_PATH" > /dev/null <<YAML || return 7 # YAML creation failure
 url: ${URL}
 user: ${ADMINUSER}
 debug: true
@@ -640,9 +640,6 @@ YAML
         sudo -u "$WPOWNER" -- cp "${WPROOT}/${SECRET_DIR_NAME}/index.php" "$WPROOT" || return 17 # "copying index.php"
         sudo -u "$WPOWNER" -- sed -i "s|'/wp-blog-header.php'|'/${SECRET_DIR_NAME}/wp-blog-header.php'|" index.php || return 18 # modifying index.php
 
-        # /wp-config.php fail2ban trap
-        sudo -u "$WPOWNER" -- tee "${WPROOT}/wp-config.php" > /dev/null <<< '<?php for ( $i = 1; $i <= 6; $i++ ) { error_log( "File does not exist: " . "login_no-wp-here" ); } exit;'
-
         # do core config, options from YAML
         cat <<WPCFG | do_wp__ core config --extra-php || return 18 # "config failure"
 //define( 'WP_DEBUG', false );
@@ -663,6 +660,9 @@ WPCFG
         sudo -u "$WPOWNER" -- chmod 640 "${WPROOT}/${SECRET_DIR_NAME}/wp-config.php" || return 21 # "chown error"
 
         do_wp__ core install "--url=${URL}/${SECRET_DIR_NAME}" || return 19 # "core install failure"
+
+        # /wp-config.php fail2ban trap
+        sudo -u "$WPOWNER" -- tee "${WPROOT}/wp-config.php" > /dev/null <<< '<?php for ( $i = 1; $i <= 6; $i++ ) { error_log( "File does not exist: " . "login_no-wp-here" ); } exit;'
 
         # revert home URL
         do_wp__ option set home "$URL" || return 20 # "install failure"
