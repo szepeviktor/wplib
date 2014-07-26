@@ -1,12 +1,13 @@
 #!/bin/bash
 
 DIR="$1"
+PHAR="https://github.com/wp-cli/builds/raw/gh-pages/phar/wp-cli.phar"
 
 # die() comes from here
 . /usr/local/bin/libbash
 
 dump_control() {
-    cat > DEBIAN/control << CTRL
+    cat > DEBIAN/control <<CTRL
 Package: php-wpcli
 Version: 0.0.0
 Architecture: all
@@ -22,23 +23,39 @@ Description: wp-cli is a set of command-line tools for managing
 CTRL
 }
 
-# deb's content dir
-[ -d "$DIR" ] || die 1 "no dir"
+# deb's dir
+if ! [ -d "$DIR" ]; then
+    mkdir ./php-wpcli || die 1 "cannot create dir here: ${PWD}"
+    DIR="php-wpcli"
+fi
+
+# should be called php-wpcli as in Debian
 [ "$(basename "$DIR")" = php-wpcli ] || die 2 "wrong dirname"
 
 pushd "$DIR"
 
-# check dir's content
-[ -r DEBIAN/control ] || (mkdir DEBIAN; dump_control)
+# control file
+if ! [ -r DEBIAN/control ]; then
+    mkdir DEBIAN
+    dump_control
+fi
+
+# content dirs
 [ -d usr/bin ] || mkdir -p usr/bin
 
-wget -O /usr/local/bin/wp "https://raw.github.com/wp-cli/builds/gh-pages/phar/wp-cli.phar" \
-    || die 4 "download failure"
+# download current version
+wget -nv -O usr/bin/wp "$PHAR" || die 4 "download failure"
+chmod +x usr/bin/wp || die 4 "chmod failure"
 
-WPCLI_VER="$(grep -a "define.*WP_CLI_VERSION" usr/bin/wp | cut -d"'" -f4)"
+# get version
+WPCLI_VER="$(grep -ao "define.*WP_CLI_VERSION.*;" usr/bin/wp | cut -d"'" -f4)"
 [ -z "$WPCLI_VER" ] && die 5 "cannot get version"
+echo "Current version: ${WPCLI_VER}"
 
+# update version
 sed -i "s/^Version: .*$/Version: ${WPCLI_VER}/" DEBIAN/control || die 6 "version update failure"
+
+# update MD5-s
 find usr -type f -exec md5sum \{\} \; > DEBIAN/md5sums || die 7 "md5sum creation failure"
 popd
 
