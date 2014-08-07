@@ -1,0 +1,6 @@
+url: http://SITENAME.TLD
+debug: true
+user: viktor
+skip-plugins: better-wp-security
+core update:
+    locale: hu_HU
