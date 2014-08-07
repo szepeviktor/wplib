@@ -381,7 +381,7 @@ check_wpconfig(){
 
     for DEFINE in WPLANG WP_DEBUG WP_MAX_MEMORY_LIMIT WP_POST_REVISIONS WP_CACHE \
         DISABLE_WP_CRON AUTOMATIC_UPDATER_DISABLED DISALLOW_FILE_EDIT \
-        WP_USE_EXT_MYSQL; do
+        ITSEC_FILE_CHECK_CRON WP_USE_EXT_MYSQL; do
         if ! grep --color -Hn "define.*${DEFINE}" "$WPCONFIG"; then
             case "$DEFINE" in
                 WPLANG)
@@ -407,6 +407,9 @@ check_wpconfig(){
                 ;;
                 DISALLOW_FILE_EDIT)
                     wp_error "define( 'DISALLOW_FILE_EDIT', true );"
+                ;;
+                ITSEC_FILE_CHECK_CRON)
+                    wp_error "define( 'ITSEC_FILE_CHECK_CRON', true );"
                 ;;
                 WP_USE_EXT_MYSQL)
                     wp_error "define( 'WP_USE_EXT_MYSQL', false );"
@@ -602,7 +605,7 @@ MYSQL
     else
         YAML_PATH="${WPROOT}/wp-cli.yml"
     fi
-    sudo -u "$WPOWNER" -- tee "$YAML_PATH" > /dev/null <<YAML || return 7 # YAML creation failure
+    sudo -u "$WPOWNER" -- cat <<YAML > "$YAML_PATH" || return 7 # YAML creation failure
 url: ${URL}
 user: ${ADMINUSER}
 debug: true
@@ -640,6 +643,9 @@ YAML
         sudo -u "$WPOWNER" -- cp "${WPROOT}/${SECRET_DIR_NAME}/index.php" "$WPROOT" || return 17 # "copying index.php"
         sudo -u "$WPOWNER" -- sed -i "s|'/wp-blog-header.php'|'/${SECRET_DIR_NAME}/wp-blog-header.php'|" index.php || return 18 # modifying index.php
 
+        # /wp-config.php fail2ban trap
+        sudo -u "$WPOWNER" -- tee "${WPROOT}/wp-config.php" > /dev/null <<< '<?php for ( $i = 1; $i <= 6; $i++ ) { error_log( "File does not exist: " . "login_no-wp-here" ); } exit;'
+
         # do core config, options from YAML
         cat <<WPCFG | do_wp__ core config --extra-php || return 18 # "config failure"
 //define( 'WP_DEBUG', false );
@@ -655,14 +661,12 @@ define( 'DISALLOW_FILE_EDIT', true );
 
 define( 'DISABLE_WP_CRON', true );
 define( 'AUTOMATIC_UPDATER_DISABLED', true );
+define( 'ITSEC_FILE_CHECK_CRON', true );
 define( 'WP_CACHE', true );
 WPCFG
         sudo -u "$WPOWNER" -- chmod 640 "${WPROOT}/${SECRET_DIR_NAME}/wp-config.php" || return 21 # "chown error"
 
         do_wp__ core install "--url=${URL}/${SECRET_DIR_NAME}" || return 19 # "core install failure"
-
-        # /wp-config.php fail2ban trap
-        sudo -u "$WPOWNER" -- tee "${WPROOT}/wp-config.php" > /dev/null <<< '<?php for ( $i = 1; $i <= 6; $i++ ) { error_log( "File does not exist: " . "login_no-wp-here" ); } exit;'
 
         # revert home URL
         do_wp__ option set home "$URL" || return 20 # "install failure"
@@ -678,6 +682,7 @@ define( 'DISALLOW_FILE_EDIT', true );
 
 define( 'DISABLE_WP_CRON', true );
 define( 'AUTOMATIC_UPDATER_DISABLED', true );
+define( 'ITSEC_FILE_CHECK_CRON', true );
 define( 'WP_CACHE', true );
 WPCFG
         sudo -u "$WPOWNER" -- chmod 640 "${WPROOT}/wp-config.php" || return 22 # "chown error"
