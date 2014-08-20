@@ -171,29 +171,31 @@ do_robots() {
 ## param: user
 itsec_screen() {
     local USER="$1"
-    local ITSEC_EVERY_PAGE='"itsec_security_updates","itsec_need_help","itsec_get_backup","itsec_sync_integration"'
+    local ITSEC_BOXES='"itsec_security_updates","itsec_need_help","itsec_get_backup","itsec_sync_integration"'
 
     detect_wp || return 1 # no wp
     wp_log "owner=${WPOWNER}"
-    do_wp user get "$USER" > /dev/null || return 1
+    do_wp user get "$USER" > /dev/null || return 2 # no user
 
-    do_wp__ user meta delete "$USER" metaboxhidden_toplevel_page_itsec
-    do_wp__ user meta delete "$USER" metaboxhidden_security_page_toplevel_page_itsec_settings
-    do_wp__ user meta delete "$USER" metaboxhidden_security_page_toplevel_page_itsec_advanced
-    do_wp__ user meta delete "$USER" metaboxhidden_security_page_toplevel_page_itsec_backups
-    do_wp__ user meta delete "$USER" metaboxhidden_security_page_toplevel_page_itsec_logs
-    do_wp__ user meta delete "$USER" screen_layout_security_page_toplevel_page_itsec_logs
+    # useless before update
+    #do_wp__ user meta delete "$USER" metaboxhidden_toplevel_page_itsec
+    #do_wp__ user meta delete "$USER" metaboxhidden_security_page_toplevel_page_itsec_settings
+    #do_wp__ user meta delete "$USER" metaboxhidden_security_page_toplevel_page_itsec_advanced
+    #do_wp__ user meta delete "$USER" metaboxhidden_security_page_toplevel_page_itsec_backups
+    #do_wp__ user meta delete "$USER" metaboxhidden_security_page_toplevel_page_itsec_logs
+    #do_wp__ user meta delete "$USER" screen_layout_security_page_toplevel_page_itsec_logs
 
     do_wp__ user meta update "$USER" metaboxhidden_toplevel_page_itsec \
-        '["itsec_get_started",'"$ITSEC_EVERY_PAGE"']' --format=json
+        '["itsec_get_started",'"$ITSEC_BOXES"']' --format=json
     do_wp__ user meta update "$USER" metaboxhidden_security_page_toplevel_page_itsec_settings \
-        '["ssl_options",'"$ITSEC_EVERY_PAGE"']' --format=json
+        '["ssl_options",'"$ITSEC_BOXES"']' --format=json
     do_wp__ user meta update "$USER" metaboxhidden_security_page_toplevel_page_itsec_advanced \
-        '["advanced_intro",'"$ITSEC_EVERY_PAGE"']' --format=json
+        '["advanced_intro",'"$ITSEC_BOXES"']' --format=json
     do_wp__ user meta update "$USER" metaboxhidden_security_page_toplevel_page_itsec_backups \
-        '["backup_description","backupbuddy_info",'"$ITSEC_EVERY_PAGE"']' --format=json
+        '["backup_description","backupbuddy_info",'"$ITSEC_BOXES"']' --format=json
     do_wp__ user meta update "$USER" metaboxhidden_security_page_toplevel_page_itsec_logs \
-        '["itsec_log_header",'"$ITSEC_EVERY_PAGE"']' --format=json
+        '["itsec_log_header",'"$ITSEC_BOXES"']' --format=json
+
     do_wp__ user meta update "$USER" screen_layout_security_page_toplevel_page_itsec_logs \
         '"1"' --format=json
 }
