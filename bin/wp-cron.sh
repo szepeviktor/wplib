@@ -1,10 +1,16 @@
 #!/bin/bash
 
-
-WPCRON_PATH="server/wp-cron.php"
-
 DIR="$1"
-[ -d "$DIR" ] || exit 1
+if [ -f "$DIR" ]; then
+    # wp-cron.php directly specified
+    WPCRON_PATH="$(basename "$DIR")"
+    DIR="$(dirname "$DIR")"
+elif [ -d "$DIR" ]; then
+    # DIR is a directory
+    WPCRON_PATH="server/wp-cron.php"
+else
+    exit 1
+fi
 
 ## server data
 
