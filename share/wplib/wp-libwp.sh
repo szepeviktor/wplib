@@ -381,7 +381,7 @@ check_wpconfig(){
 
     find_wpconfig || return 2 # no wp-config
 
-    for DEFINE in WPLANG WP_DEBUG WP_MAX_MEMORY_LIMIT WP_POST_REVISIONS WP_CACHE \
+    for DEFINE in WPLANG WP_DEBUG WP_MEMORY_LIMIT WP_MAX_MEMORY_LIMIT WP_POST_REVISIONS WP_CACHE \
         DISABLE_WP_CRON AUTOMATIC_UPDATER_DISABLED DISALLOW_FILE_EDIT \
         ITSEC_FILE_CHECK_CRON WP_USE_EXT_MYSQL; do
         if ! grep --color -Hn "define.*${DEFINE}" "$WPCONFIG"; then
@@ -391,6 +391,9 @@ check_wpconfig(){
                 ;;
                 WP_DEBUG)
                     wp_error "define( 'WP_DEBUG', false );"
+                ;;
+                WP_MEMORY_LIMIT)
+                    wp_error "define( 'WP_MEMORY_LIMIT', '96M' );"
                 ;;
                 WP_MAX_MEMORY_LIMIT)
                     wp_error "define( 'WP_MAX_MEMORY_LIMIT', '127M' );"

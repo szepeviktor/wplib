@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# v 0.3
+# wp-cron.php; directory with /server under it; no argument
+
 DIR="$1"
 if [ -f "$DIR" ]; then
     # wp-cron.php directly specified
@@ -7,6 +10,10 @@ if [ -f "$DIR" ]; then
     DIR="$(dirname "$DIR")"
 elif [ -d "$DIR" ]; then
     # DIR is a directory
+    WPCRON_PATH="server/wp-cron.php"
+elif [ -z "$DIR" ] && [ -d "/home/$(id -nu)/public_html" ]; then
+    # look for standard document root
+    DIR="/home/$(id -nu)/public_html"
     WPCRON_PATH="server/wp-cron.php"
 else
     exit 1
