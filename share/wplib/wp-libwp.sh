@@ -7,7 +7,6 @@
 
 WPLIBROOT="/usr/local/share/wplib"
 OPCACHEDEL="${WPLIBROOT}/opcache-del-dir.php"
-ROBOTSUPDATES="${WPLIBROOT}/wp-robots-update.php"
 
 
 ## set terminal color constants
@@ -92,7 +91,7 @@ do_wp__() {
 
 ## check WPOWNER and WPROOT for wp-cli and sudo
 do_wp() {
-    php -r 'exit((extension_loaded("suhosin") && strpos(ini_get("suhosin.executor.include.whitelist"), "phar") !== false )?0:1);' \
+    php -r 'exit((! extension_loaded("suhosin") || strpos(ini_get("suhosin.executor.include.whitelist"), "phar") !== false )?0:1);' \
         || die 99 "suhosin whitelist"
     which wp > /dev/null || die 99 "no wp-cli"
     [ -z "$WPOWNER" ] && die 97 "owner empty"
@@ -527,6 +526,7 @@ check_yaml() {
                     wp_error "debug: true"
                 ;;
                 skip-plugins)
+                    # Version randomizer
                     wp_error "skip-plugins: better-wp-security"
                 ;;
             esac
@@ -603,14 +603,14 @@ GRANT ALL PRIVILEGES ON \`${DBNAME}\`.* TO '${DBUSER}'@'localhost'
 FLUSH PRIVILEGES;
 MYSQL
 
-    # generate wp-cli YAML
+    # Generate wp-cli YAML
     wp_log "generating wp-cli.yaml"
-    if [ "$(basename "$WPROOT")" = server ]; then
+    if [ "html" == "$(basename "$WPROOT")" ]; then
         YAML_PATH="$(dirname "$WPROOT")/wp-cli.yml"
     else
         YAML_PATH="${WPROOT}/wp-cli.yml"
     fi
-    sudo -u "$WPOWNER" -- cat <<YAML > "$YAML_PATH" || return 7 # YAML creation failure
+    sudo -u "$WPOWNER" -- tee "$YAML_PATH" > /dev/null <<YAML || return 7 # YAML creation failure
 url: ${URL}
 user: ${ADMINUSER}
 debug: true
@@ -628,17 +628,19 @@ core install:
   admin_user: ${ADMINUSER}
   admin_password: ${ADMINPASS}
   admin_email: ${ADMINEMAIL}
-#  url: ${URL%/}  https://github.com/wp-cli/wp-cli/issues/1286
-skip-plugins: better-wp-security
+  url: ${URL%/}/${SECRET_DIR_NAME}
+skip-plugins:
+  # Version randomizer
+  - better-wp-security
 YAML
     sudo -u "$WPOWNER" -- chmod 640 "$YAML_PATH"
-
     do_wp__ core download || return 10 # "download failure"
 
     if [ "$WPSECRET" = 1 ]; then
         # secret dir
         sudo -u "$WPOWNER" -- mkdir "${WPROOT}/${SECRET_DIR_NAME}" || return 14 # "secret dir creation failure"
-        sudo -u "$WPOWNER" -- find "$WPROOT" -mindepth 1 -maxdepth 1 -not -name "wp-content" -not -name "$SECRET_DIR_NAME" \
+        sudo -u "$WPOWNER" -- find "$WPROOT" -mindepth 1 -maxdepth 1 \
+            -not -name "wp-cli.yml" -not -name "wp-content" -not -name "$SECRET_DIR_NAME" \
             -exec mv \{\} "${WPROOT}/${SECRET_DIR_NAME}" \; || return 15 # "move to secret"
 
         # static dir
@@ -648,16 +650,13 @@ YAML
         sudo -u "$WPOWNER" -- cp "${WPROOT}/${SECRET_DIR_NAME}/index.php" "$WPROOT" || return 17 # "copying index.php"
         sudo -u "$WPOWNER" -- sed -i "s|'/wp-blog-header.php'|'/${SECRET_DIR_NAME}/wp-blog-header.php'|" index.php || return 18 # modifying index.php
 
-        # /wp-config.php fail2ban trap
-        sudo -u "$WPOWNER" -- tee "${WPROOT}/wp-config.php" > /dev/null <<< '<?php for ( $i = 1; $i <= 6; $i++ ) { error_log( "File does not exist: " . "login_no-wp-here" ); } exit;'
-
         # do core config, options from YAML
         cat <<WPCFG | do_wp__ core config --extra-php || return 18 # "config failure"
 //define( 'WP_DEBUG', false );
 define( 'WP_DEBUG', true );
 
-define( 'WP_CONTENT_DIR', '/var/www/subdirwp/server/$STATIC_DIR_NAME' );
-define( 'WP_CONTENT_URL', 'http://subdir.wp/$STATIC_DIR_NAME' );
+define( 'WP_CONTENT_DIR', '${WPROOT}/${STATIC_DIR_NAME}' );
+define( 'WP_CONTENT_URL', '${URL%/}/${STATIC_DIR_NAME}' );
 
 define( 'WP_MAX_MEMORY_LIMIT', '127M' );
 define( 'WP_USE_EXT_MYSQL', false );
@@ -666,15 +665,31 @@ define( 'DISALLOW_FILE_EDIT', true );
 
 define( 'DISABLE_WP_CRON', true );
 define( 'AUTOMATIC_UPDATER_DISABLED', true );
-define( 'ITSEC_FILE_CHECK_CRON', true );
-define( 'WP_CACHE', true );
+//define( 'WP_CACHE', true );
 WPCFG
         sudo -u "$WPOWNER" -- chmod 640 "${WPROOT}/${SECRET_DIR_NAME}/wp-config.php" || return 21 # "chown error"
 
-        do_wp__ core install "--url=${URL}/${SECRET_DIR_NAME}" || return 19 # "core install failure"
+        do_wp__ core install || return 19 # "core install failure"
 
         # revert home URL
-        do_wp__ option set home "$URL" || return 20 # "install failure"
+        do_wp__ option set home "${URL%/}" || return 20 # "install failure"
+
+        # /wp-config.php fail2ban trap
+        sudo -u "$WPOWNER" -- tee "${WPROOT}/wp-config.php" > /dev/null <<FAKECONFIG
+<?php
+/*
+Snippet Name: Triggers fail2ban in non-WordPress projects and subdirectory installs
+*/
+
+for ( \$i = 1; \$i <= 6; \$i++ ) {
+    error_log( 'Malicious traffic detected: ' . 'no_wp_here_wplogin' );
+}
+
+ob_get_level() && ob_end_clean();
+header( 'Status: 403 Forbidden' );
+header( 'HTTP/1.0 403 Forbidden' );
+exit();
+FAKECONFIG
     else
         cat <<WPCFG | do_wp__ core config --extra-php || return 11 # "core config failure"
 //define( 'WP_DEBUG', false );

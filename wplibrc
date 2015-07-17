@@ -3,14 +3,16 @@
 
 DBNAME="wpcdb"
 DBUSER="wpcuser"
-
-#DBPASS="<will be filled in with a 12 characters long random password>"
+#DBPASS="<12 characters long random password will be generated>"
 #DBPREFIX="<a secure prefix will be generated>"
 
 LOCALE="hu_HU"
 
-URL="http://wordpress.tk"
+URL="http://wordpress.wp"
 TITLE="WordPress website"
+
+STATIC_DIR_NAME="static"
+SECRET_DIR_NAME="secret"
 
 ADMINUSER="viktor"
 ADMINPASS="secret"
